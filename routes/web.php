@@ -13,7 +13,6 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\BiometricController;
 use App\Http\Controllers\JobPostingController;
-use App\Http\Controllers\WebauthnController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to login
@@ -87,15 +86,6 @@ Route::middleware(['auth','checkRole'])->group(function () {
         Route::post('biometric/process', [BiometricController::class,'processLogs'])->name('biometric.process');
         Route::post('biometric/tap',     [BiometricController::class,'tap'])->name('biometric.tap');
     });
-
-    // ── WebAuthn Fingerprint ───────────────────────────────────────────────
-    Route::get('webauthn/manage',               [WebauthnController::class,'manage'])->name('webauthn.manage');
-    Route::get('webauthn/register-options',      [WebauthnController::class,'registerOptions'])->name('webauthn.register-options');
-    Route::post('webauthn/register-verify',      [WebauthnController::class,'registerVerify'])->name('webauthn.register-verify');
-    Route::delete('webauthn/{credential}',       [WebauthnController::class,'deleteCredential'])->name('webauthn.delete');
-    Route::get('webauthn/authenticate-options',  [WebauthnController::class,'authenticateOptions'])->name('webauthn.auth-options');
-    Route::post('webauthn/authenticate-verify',  [WebauthnController::class,'authenticateVerify'])->name('webauthn.auth-verify');
-    Route::get('webauthn/has-credentials',       [WebauthnController::class,'hasCredentials'])->name('webauthn.has-credentials');
 
     // ── Leaves ─────────────────────────────────────────────────────────────
     Route::get('leaves',              [LeaveController::class,'index'])->name('leaves.index');

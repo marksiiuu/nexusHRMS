@@ -143,9 +143,6 @@
         <a href="{{ route('payroll.my') }}" class="sidebar-link {{ request()->routeIs('payroll.my') ? 'active' : '' }}">
             <i class="bi bi-wallet2"></i> My Payslips
         </a>
-        <a href="{{ route('webauthn.manage') }}" class="sidebar-link {{ request()->routeIs('webauthn.*') ? 'active' : '' }}">
-            <i class="bi bi-fingerprint"></i> Fingerprint Security
-        </a>
         @endif
         @if(auth()->user()->canManageUsers())
         <div class="nav-section">System</div>

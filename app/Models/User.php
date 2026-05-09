@@ -48,7 +48,6 @@ class User extends Authenticatable
     public function approvedLeaves()      { return $this->hasMany(Leave::class,'approved_by'); }
     public function processedPayrolls()   { return $this->hasMany(Payroll::class,'processed_by'); }
     public function jobPostings()         { return $this->hasMany(JobPosting::class,'created_by'); }
-    public function webauthnCredentials() { return $this->hasMany(WebauthnCredential::class); }
 
     // Scope: only active (not archived)
     public function scopeActive($query)   { return $query->whereNull('archived_at'); }
