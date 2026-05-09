@@ -5,7 +5,8 @@
 
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
     <div>
-        <h1>Good {{ date('H') < 12 ? 'Morning' : (date('H') < 17 ? 'Afternoon' : 'Evening') }},
+        @php $phHour = \Carbon\Carbon::now('Asia/Manila')->format('G'); @endphp
+        <h1 id="greetingHeading">Good {{ $phHour < 12 ? 'Morning' : ($phHour < 18 ? 'Afternoon' : 'Evening') }},
         {{ Str::words(auth()->user()->name, 1, '') }}!</h1>
         <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0">
             <li class="breadcrumb-item active">Dashboard — Home</li>
@@ -134,16 +135,30 @@
                     </div>
                 </div>
                 @endif
-                <form method="POST" action="{{ route('attendance.clock') }}">
-                    @csrf
-                    <button type="submit" class="btn btn-primary w-100">
+                {{-- Fingerprint Clock In/Out --}}
+                <div id="fingerprintSection" style="display:none;" class="mb-2">
+                    <button type="button" class="btn btn-primary w-100" id="fingerprintClockBtn" onclick="fingerprintClock()">
                         <i class="bi bi-fingerprint me-2"></i>
-                        @if(!$todayAtt) Clock In
-                        @elseif(!$todayAtt->time_out) Clock Out
+                        @if(!$todayAtt) <span id="fpAction">Clock In with Fingerprint</span>
+                        @elseif(!$todayAtt->time_out) <span id="fpAction">Clock Out with Fingerprint</span>
+                        @else <span id="fpAction">Already Clocked Out Today</span> @endif
+                    </button>
+                    <div id="fpAlert" class="mt-2" style="display:none;"></div>
+                </div>
+                {{-- Manual fallback --}}
+                <form method="POST" action="{{ route('attendance.clock') }}" id="manualClockForm">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-primary w-100" id="manualClockBtn">
+                        <i class="bi bi-clock me-2"></i>
+                        @if(!$todayAtt) Clock In (Manual)
+                        @elseif(!$todayAtt->time_out) Clock Out (Manual)
                         @else Already Clocked Out Today @endif
                     </button>
                 </form>
-                <small class="text-muted d-block mt-2 text-center">All times in Philippine Standard Time (PHT)</small>
+                <div class="d-flex align-items-center justify-content-between mt-2">
+                    <small class="text-muted"><i class="bi bi-clock me-1"></i>All times in PHT</small>
+                    <a href="{{ route('webauthn.manage') }}" class="small text-decoration-none"><i class="bi bi-fingerprint me-1"></i>Manage Fingerprints</a>
+                </div>
             </div>
         </div>
     </div>
@@ -286,6 +301,13 @@ function updatePHDate(){
     const opts = {weekday:'long',year:'numeric',month:'long',day:'numeric'};
     const el = document.getElementById('phDate');
     if(el) el.textContent = ph.toLocaleDateString('en-PH',opts);
+    // Update greeting dynamically based on PHT hour
+    const gh = document.getElementById('greetingHeading');
+    if(gh){
+        const h = ph.getHours();
+        const period = h < 12 ? 'Morning' : (h < 18 ? 'Afternoon' : 'Evening');
+        gh.innerHTML = gh.innerHTML.replace(/Good (Morning|Afternoon|Evening)/, 'Good ' + period);
+    }
     // Also update clock card
     const cc = document.getElementById('liveClockCard');
     if(cc){
@@ -309,5 +331,90 @@ new Chart(ctx,{
     },
     options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}
 });
+
+// ── WebAuthn Fingerprint Clock In/Out ──────────────────────────────
+function base64urlToBuffer(b64) {
+    const base64 = b64.replace(/-/g,'+').replace(/_/g,'/');
+    const pad = base64.length%4===0?'':'='.repeat(4-(base64.length%4));
+    const bin = atob(base64+pad);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return bytes.buffer;
+}
+function bufferToBase64url(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin='';
+    for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+// Check if user has registered fingerprints and show button
+if (window.PublicKeyCredential) {
+    fetch('{{ route("webauthn.has-credentials") }}')
+        .then(r=>r.json())
+        .then(d=>{
+            if(d.has_credentials){
+                document.getElementById('fingerprintSection').style.display='block';
+            }
+        }).catch(()=>{});
+}
+
+async function fingerprintClock() {
+    const btn = document.getElementById('fingerprintClockBtn');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scan your fingerprint...';
+
+    try {
+        // 1. Get authentication options
+        const optRes = await fetch('{{ route("webauthn.auth-options") }}');
+        if(!optRes.ok) { const e = await optRes.json(); throw new Error(e.error||'Failed'); }
+        const options = await optRes.json();
+
+        // 2. Convert base64url to ArrayBuffer
+        options.challenge = base64urlToBuffer(options.challenge);
+        options.allowCredentials = (options.allowCredentials||[]).map(c=>({
+            ...c, id: base64urlToBuffer(c.id)
+        }));
+
+        // 3. Trigger fingerprint prompt
+        const assertion = await navigator.credentials.get({publicKey: options});
+
+        // 4. Send to server
+        const verifyRes = await fetch('{{ route("webauthn.auth-verify") }}', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},
+            body: JSON.stringify({
+                id: bufferToBase64url(assertion.rawId),
+                response: {
+                    clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
+                    authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+                    signature: bufferToBase64url(assertion.response.signature),
+                },
+            }),
+        });
+        const result = await verifyRes.json();
+
+        const fpAlert = document.getElementById('fpAlert');
+        if(result.success){
+            fpAlert.innerHTML = `<div class="alert alert-success py-2 small mb-0"><i class="bi bi-check-circle-fill me-2"></i>${result.message}</div>`;
+            fpAlert.style.display='block';
+            setTimeout(()=>location.reload(), 2000);
+        } else {
+            fpAlert.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><i class="bi bi-exclamation-triangle-fill me-2"></i>${result.message}</div>`;
+            fpAlert.style.display='block';
+        }
+    } catch(err) {
+        const fpAlert = document.getElementById('fpAlert');
+        if(err.name==='NotAllowedError'){
+            fpAlert.innerHTML = `<div class="alert alert-warning py-2 small mb-0"><i class="bi bi-x-circle me-2"></i>Fingerprint scan cancelled.</div>`;
+        } else {
+            fpAlert.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><i class="bi bi-exclamation-triangle-fill me-2"></i>${err.message}</div>`;
+        }
+        fpAlert.style.display='block';
+    }
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+}
 </script>
 @endpush

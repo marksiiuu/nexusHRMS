@@ -64,6 +64,11 @@
         .page-header{margin-bottom:1.4rem;}
         .page-header h1{font-size:1.35rem;font-weight:800;color:#0f172a;}
         .breadcrumb{font-size:.76rem;margin:0;}
+        .pagination{margin:0;gap:2px;}
+        .pagination .page-link{font-size:.8rem;padding:.3rem .65rem;border-radius:6px;color:var(--primary);border-color:#e2e8f0;}
+        .pagination .page-link:hover{background:var(--accent);border-color:var(--primary);color:var(--primary);}
+        .pagination .page-item.active .page-link{background:var(--primary);border-color:var(--primary);color:#fff;}
+        .pagination .page-item.disabled .page-link{color:#9ca3af;background:#f9fafb;border-color:#e2e8f0;}
         .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1045;}
         @media(max-width:991px){
             #sidebar{transform:translateX(-100%);}
@@ -137,6 +142,9 @@
         </a>
         <a href="{{ route('payroll.my') }}" class="sidebar-link {{ request()->routeIs('payroll.my') ? 'active' : '' }}">
             <i class="bi bi-wallet2"></i> My Payslips
+        </a>
+        <a href="{{ route('webauthn.manage') }}" class="sidebar-link {{ request()->routeIs('webauthn.*') ? 'active' : '' }}">
+            <i class="bi bi-fingerprint"></i> Fingerprint Security
         </a>
         @endif
         @if(auth()->user()->canManageUsers())

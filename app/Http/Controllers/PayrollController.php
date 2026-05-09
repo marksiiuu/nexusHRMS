@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Payroll;
 use App\Models\Employee;
+use App\Models\Department;
 use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -38,7 +39,8 @@ class PayrollController extends Controller
     public function create()
     {
         $employees = Employee::whereNull('archived_at')->where('status','active')->with('department')->get();
-        return view('payroll.create', compact('employees'));
+        $departments = Department::whereNull('archived_at')->orderBy('name')->get();
+        return view('payroll.create', compact('employees', 'departments'));
     }
 
     public function store(Request $request)
@@ -169,29 +171,30 @@ class PayrollController extends Controller
         return view('payroll.my', compact('payrolls','years'));
     }
 
-    // Bulk generate payroll for all active employees for a period
+    // Bulk generate payroll for employees in a specific department
     public function generateBulk(Request $request)
     {
         $request->validate([
+            'department_id'   => 'required|exists:departments,id',
             'year'            => 'required|integer',
             'month'           => 'required|integer|min:1|max:12',
             'pay_period'      => 'required|in:monthly,semi_monthly',
             'pay_period_type' => 'required|in:first,second,full',
         ]);
 
-        $existingCount = Payroll::where('year', $request->year)
-            ->where('month', $request->month)
-            ->where('pay_period_type', $request->pay_period_type)
-            ->active()
-            ->count();
+        $department = Department::findOrFail($request->department_id);
 
-        if ($existingCount > 0 && !$request->has('force')) {
+        $employees = Employee::whereNull('archived_at')
+            ->where('status','active')
+            ->where('department_id', $request->department_id)
+            ->get();
+
+        if ($employees->isEmpty()) {
             return redirect()->back()
-                ->with('warning', "Payroll records already exist for this period ($existingCount records found). Do you want to generate for remaining employees?")
+                ->with('error', "No active employees found in the {$department->name} department.")
                 ->withInput();
         }
 
-        $employees = Employee::whereNull('archived_at')->where('status','active')->get();
         $created = 0; $skipped = 0;
 
         foreach ($employees as $emp) {
@@ -232,7 +235,7 @@ class PayrollController extends Controller
             ]);
             $created++;
         }
-        return redirect()->route('payroll.index')->with('success',"Bulk payroll: {$created} created, {$skipped} already existed.");
+        return redirect()->route('payroll.index')->with('success',"Bulk payroll for {$department->name}: {$created} created, {$skipped} already existed.");
     }
 
     public function checkBulk(Request $request)
@@ -241,26 +244,39 @@ class PayrollController extends Controller
             'year'            => 'required|integer',
             'month'           => 'required|integer',
             'pay_period_type' => 'required|string',
+            'department_id'   => 'required|integer',
         ]);
+
+        // Get employee IDs for the selected department
+        $employeeIds = Employee::whereNull('archived_at')
+            ->where('status', 'active')
+            ->where('department_id', $request->department_id)
+            ->pluck('id');
 
         $count = Payroll::where('year', $request->year)
             ->where('month', $request->month)
             ->where('pay_period_type', $request->pay_period_type)
+            ->whereIn('employee_id', $employeeIds)
             ->active()
             ->count();
 
         $processedCount = Payroll::where('year', $request->year)
             ->where('month', $request->month)
             ->where('pay_period_type', $request->pay_period_type)
+            ->whereIn('employee_id', $employeeIds)
             ->whereIn('status', ['processed', 'paid'])
             ->active()
             ->count();
+
+        $totalEmployees = $employeeIds->count();
 
         return response()->json([
             'exists' => $count > 0,
             'count' => $count,
             'processed' => $processedCount > 0,
-            'processed_count' => $processedCount
+            'processed_count' => $processedCount,
+            'total_employees' => $totalEmployees,
+            'remaining' => $totalEmployees - $count,
         ]);
     }
 }

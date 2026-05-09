@@ -14,9 +14,18 @@
 {{-- Bulk Generate Card --}}
 <div class="card mb-3" style="border-left:4px solid #253D90;">
     <div class="card-body">
-        <h6 class="fw-700 mb-3"><i class="bi bi-lightning-fill me-2" style="color:#253D90;"></i>Bulk Generate — All Active Employees</h6>
-        <form method="POST" action="{{ route('payroll.generate-bulk') }}" class="row g-2 align-items-end" onsubmit="return confirm('Generate payroll for ALL active employees for this period?')">
+        <h6 class="fw-700 mb-3"><i class="bi bi-lightning-fill me-2" style="color:#253D90;"></i>Bulk Generate — By Department</h6>
+        <form method="POST" action="{{ route('payroll.generate-bulk') }}" class="row g-2 align-items-end" id="bulkForm">
             @csrf
+            <div class="col-md-3">
+                <label class="form-label">Department <span class="text-danger">*</span></label>
+                <select name="department_id" class="form-select form-select-sm" id="bulkDepartment" required>
+                    <option value="">Select Department</option>
+                    @foreach($departments as $dept)
+                    <option value="{{ $dept->id }}">{{ $dept->name }} ({{ $dept->code }})</option>
+                    @endforeach
+                </select>
+            </div>
             <div class="col-md-2">
                 <label class="form-label">Year</label>
                 <select name="year" class="form-select form-select-sm">
@@ -52,7 +61,7 @@
             </div>
         </form>
         <div id="bulkAlert" class="mt-3" style="display:none;"></div>
-        <small class="text-muted d-block mt-2"><i class="bi bi-info-circle me-1"></i>Salary will be automatically halved for semi-monthly. Attendance days will be auto-fetched. Existing records are skipped. Salary has been bulk released this biweekly.</small>
+        <small class="text-muted d-block mt-2"><i class="bi bi-info-circle me-1"></i>Select a department first. Salary is auto-halved for semi-monthly. Attendance days are auto-fetched. Existing records are skipped.</small>
     </div>
 </div>
 
@@ -265,42 +274,70 @@ function recalc(){
 recalc();
 
 // Bulk check logic
-const bulkYear = document.querySelector('select[name="year"]');
-const bulkMonth = document.querySelector('select[name="month"]');
+const bulkDepartment = document.getElementById('bulkDepartment');
+const bulkYear = document.querySelector('#bulkForm select[name="year"]');
+const bulkMonth = document.querySelector('#bulkForm select[name="month"]');
 const bulkPeriodType = document.getElementById('bulkPeriodType');
 const bulkAlertDiv = document.getElementById('bulkAlert');
 
+// Confirmation on submit
+document.getElementById('bulkForm').addEventListener('submit', function(e) {
+    const deptSelect = bulkDepartment;
+    if (!deptSelect.value) { e.preventDefault(); return; }
+    const deptName = deptSelect.options[deptSelect.selectedIndex].text;
+    if (!confirm(`Generate payroll for all active employees in "${deptName}" for this period?`)) {
+        e.preventDefault();
+    }
+});
+
 async function checkExistingBulk() {
+    const deptId = bulkDepartment.value;
+    if (!deptId) {
+        bulkAlertDiv.style.display = 'none';
+        return;
+    }
     const year = bulkYear.value;
     const month = bulkMonth.value;
     const periodType = bulkPeriodType.value;
 
     try {
-        const res = await fetch(`{{ route('payroll.check-bulk') }}?year=${year}&month=${month}&pay_period_type=${periodType}`);
+        const res = await fetch(`{{ route('payroll.check-bulk') }}?year=${year}&month=${month}&pay_period_type=${periodType}&department_id=${deptId}`);
         const data = await res.json();
 
-        if (data.exists) {
-            let msg = `<div class="alert alert-warning py-2 small mb-0">
+        const deptName = bulkDepartment.options[bulkDepartment.selectedIndex].text;
+        let msg = '';
+
+        if (data.total_employees === 0) {
+            msg = `<div class="alert alert-info py-2 small mb-0">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                No active employees found in <strong>${deptName}</strong>.
+            </div>`;
+        } else if (data.exists) {
+            msg = `<div class="alert alert-warning py-2 small mb-0">
                 <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                <strong>Notice:</strong> ${data.count} payroll records already exist for this period.
+                <strong>${deptName}:</strong> ${data.count} of ${data.total_employees} employees already have payroll for this period.
+                ${data.remaining > 0 ? `<strong>${data.remaining}</strong> remaining will be generated.` : 'All employees already have records — nothing to generate.'}
             `;
             if (data.processed) {
-                msg += `<br><span class="text-danger"><i class="bi bi-shield-lock-fill me-2"></i><strong>Warning:</strong> ${data.processed_count} records have already been <b>processed/paid</b>. Re-generating may cause duplicates or conflicts.</span>`;
+                msg += `<br><span class="text-danger"><i class="bi bi-shield-lock-fill me-2"></i><strong>Warning:</strong> ${data.processed_count} records have already been <b>processed/paid</b>.</span>`;
             }
             msg += `</div>`;
-            bulkAlertDiv.innerHTML = msg;
-            bulkAlertDiv.style.display = 'block';
         } else {
-            bulkAlertDiv.style.display = 'none';
+            msg = `<div class="alert alert-success py-2 small mb-0">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <strong>${deptName}:</strong> ${data.total_employees} active employees ready for payroll generation.
+            </div>`;
         }
+
+        bulkAlertDiv.innerHTML = msg;
+        bulkAlertDiv.style.display = 'block';
     } catch (e) {
         console.error('Error checking bulk payroll:', e);
     }
 }
 
-[bulkYear, bulkMonth, bulkPeriodType].forEach(el => {
+[bulkDepartment, bulkYear, bulkMonth, bulkPeriodType].forEach(el => {
     el.addEventListener('change', checkExistingBulk);
 });
-checkExistingBulk();
 </script>
 @endpush
