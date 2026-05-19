@@ -13,6 +13,8 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\BiometricController;
 use App\Http\Controllers\JobPostingController;
+use App\Http\Controllers\TaskController;
+use App\Http\Controllers\PerformanceReviewController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to login
@@ -129,6 +131,33 @@ Route::middleware(['auth','checkRole'])->group(function () {
         Route::get('recruitment/{jobPosting}/applications',  [JobPostingController::class,'applications'])->name('recruitment.applications');
         Route::post('applications/{application}/status',     [JobPostingController::class,'updateApplicationStatus'])->name('applications.status');
     });
+
+    // ── Tasks ──────────────────────────────────────────────────────────────
+    Route::get('tasks',              [TaskController::class,'index'])->name('tasks.index');
+
+    Route::middleware('checkRole:admin,hr_manager')->group(function () {
+        Route::get('tasks/create',          [TaskController::class,'create'])->name('tasks.create');
+        Route::post('tasks',                [TaskController::class,'store'])->name('tasks.store');
+        Route::get('tasks/{task}/edit',     [TaskController::class,'edit'])->name('tasks.edit');
+        Route::put('tasks/{task}',          [TaskController::class,'update'])->name('tasks.update');
+        Route::delete('tasks/{task}',       [TaskController::class,'destroy'])->name('tasks.destroy');
+    });
+
+    Route::get('tasks/{task}',       [TaskController::class,'show'])->name('tasks.show');
+    Route::post('tasks/{task}/status', [TaskController::class,'updateStatus'])->name('tasks.update-status');
+
+    // ── Performance Reviews ────────────────────────────────────────────────
+    Route::get('performance-reviews',                       [PerformanceReviewController::class,'index'])->name('performance-reviews.index');
+
+    Route::middleware('checkRole:admin,hr_manager')->group(function () {
+        Route::get('performance-reviews/create',                       [PerformanceReviewController::class,'create'])->name('performance-reviews.create');
+        Route::post('performance-reviews',                             [PerformanceReviewController::class,'store'])->name('performance-reviews.store');
+        Route::get('performance-reviews/{performanceReview}/edit',     [PerformanceReviewController::class,'edit'])->name('performance-reviews.edit');
+        Route::put('performance-reviews/{performanceReview}',          [PerformanceReviewController::class,'update'])->name('performance-reviews.update');
+        Route::delete('performance-reviews/{performanceReview}',       [PerformanceReviewController::class,'destroy'])->name('performance-reviews.destroy');
+    });
+
+    Route::get('performance-reviews/{performanceReview}',   [PerformanceReviewController::class,'show'])->name('performance-reviews.show');
 
     // ── Users ──────────────────────────────────────────────────────────────
     Route::middleware('checkRole:admin')->group(function () {

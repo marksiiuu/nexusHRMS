@@ -123,6 +123,18 @@
                 @if($pendingLeaves > 0)<span class="badge bg-danger rounded-pill">{{ $pendingLeaves }}</span>@endif
             @endif
         </a>
+        <a href="{{ route('tasks.index') }}" class="sidebar-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}">
+            <i class="bi bi-list-task"></i> Tasks
+            @php
+                $taskCount = auth()->user()->isEmployee() && auth()->user()->employee
+                    ? \App\Models\Task::where('employee_id', auth()->user()->employee->id)->whereIn('status',['pending','in_progress'])->count()
+                    : \App\Models\Task::whereIn('status',['pending','in_progress'])->count();
+            @endphp
+            @if($taskCount > 0)<span class="badge bg-info rounded-pill">{{ $taskCount }}</span>@endif
+        </a>
+        <a href="{{ route('performance-reviews.index') }}" class="sidebar-link {{ request()->routeIs('performance-reviews.*') ? 'active' : '' }}">
+            <i class="bi bi-graph-up-arrow"></i> Performance Reviews
+        </a>
         @if(auth()->user()->hasPayrollAccess())
         <div class="nav-section">Finance</div>
         <a href="{{ route('payroll.index') }}" class="sidebar-link {{ request()->routeIs('payroll.index','payroll.create','payroll.show','payroll.edit') ? 'active' : '' }}">

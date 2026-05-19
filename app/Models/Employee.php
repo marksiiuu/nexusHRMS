@@ -38,6 +38,8 @@ class Employee extends Model
     public function payrolls()         { return $this->hasMany(Payroll::class); }
     public function biometricLogs()    { return $this->hasMany(BiometricLog::class); }
     public function managedDepartment(){ return $this->hasOne(Department::class,'manager_id'); }
+    public function tasks()            { return $this->hasMany(Task::class); }
+    public function performanceReviews(){ return $this->hasMany(PerformanceReview::class); }
 
     public function scopeActive($q)   { return $q->whereNull('archived_at'); }
     public function scopeArchived($q) { return $q->whereNotNull('archived_at'); }
